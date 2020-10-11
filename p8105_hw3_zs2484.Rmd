@@ -7,6 +7,7 @@ output: github_document
 ```{r setup, include = FALSE}
 library(tidyverse)
 library(p8105.datasets)
+library(patchwork)
 
 knitr::opts_chunk$set(
   fig.width = 6,
@@ -96,7 +97,8 @@ accel_data =
                values_to = "activity_count") %>%
   mutate(
     weekday_or_weekend = case_when(day == "Monday" ~ "weekday", day == "Tuesday" ~ "weekday", day == "Wednesday" ~ "weekday", day == "Thursday" ~ "weekday", day == "Friday" ~ "weekday", day == "Saturday" ~ "weekend",day == "Sunday" ~ "weekend"),
-    day = forcats::fct_relevel(day, c("Monday","Tuesday","Wednesday","Thursday", "Friday", "Saturday","Sunday")))
+    day = forcats::fct_relevel(day, c("Monday","Tuesday","Wednesday","Thursday", "Friday", "Saturday","Sunday")),
+    minute = as.double(minute))
   
 ```
 
@@ -111,26 +113,84 @@ accel_data %>%
 ```{r, message = FALSE}
 accel_data_hour = 
   accel_data %>% 
-  group_by(week, day) %>% 
-  mutate(min_week = 1, hour = cumsum(min_week)%/%60) %>% 
-  select(- min_week)
-  
-  
+  mutate(hour = (minute - 1) %/%60) %>% 
+  group_by(day_id, day, hour) %>% 
+  summarize(hour_activity = sum(activity_count))
+
 accel_data_hour %>% 
-  group_by(day_id, hour) %>% 
-  summarize(activity_hour = sum(activity_count)) %>%
-  ggplot(aes(x = day_id, y = activity_hour, color = day_id )) +
-  geom_line()
+  ggplot(aes(x = hour, y = hour_activity, group = day_id)) +
+  geom_line(aes(colour = day ))
+
+accel_data %>% 
+  ggplot(aes(x = minute, y = activity_count, group = day_id)) +
+  geom_line(aes(colour = day))
+```
+
+### Problem 3
+
+```{r}
+data("ny_noaa")
+
+ny_noaa = ny_noaa %>%  
+  separate(date, c("year", "month", "day")) %>% 
+  mutate(across(year:tmin,as.numeric),
+         tmax = tmax / 10,
+         tmin = tmin / 10)
+
+ny_noaa %>% 
+  group_by(snow) %>% 
+  summarize(n_obs = n())
 
 ```
 
+```{r, message = FALSE}
+jan_plot =
+  ny_noaa %>% 
+  filter(month == 1) %>% 
+  group_by(year, id) %>% 
+  summarize(avg_tmax = mean(tmax)) %>% 
+  drop_na() %>% 
+  mutate(rank  = min_rank(desc(avg_tmax))) %>% 
+  ggplot(aes(x = year, y = avg_tmax, color = id)) + 
+  geom_point() +
+  geom_path(alpha = 0.5)+
+  theme(legend.position = 'none')+
+  labs(title = "Average Maximum Temperature for Each Sationin January from 1981-2010", x = "Year", y = "Average Max Temp")
 
+july_plot = 
+  ny_noaa %>% 
+  filter(month == 7) %>% 
+  group_by(year, id) %>% 
+  summarize(avg_tmax = mean(tmax)) %>% 
+  drop_na() %>% 
+  mutate(rank  = min_rank(desc(avg_tmax))) %>% 
+  ggplot(aes(x = year, y = avg_tmax, color = id)) + 
+  geom_point() +
+  geom_path(alpha = 0.5)+
+  theme(legend.position = 'none')+
+  labs(title = "Average Maximum Temperature for Each Sationin July from 1981-2010", x = "Year", y = "Average Max Temp")
 
+jan_plot / july_plot
+```
 
+```{r, warning = FALSE}
+tmax_tmin_plt = 
+  ny_noaa %>% 
+  ggplot(aes(x = tmin, y = tmax, color = id)) +
+  geom_hex()+
+  theme(legend.position = "none")
 
+snowfall_plt =
+  ny_noaa %>%
+  filter(between(snow,0,100), !is.na(snow)) %>% 
+  ggplot(aes(x = year)) +
+  geom_violin(aes(y = snow, group = as.factor(year), alpha = 0.2)) +
+  theme( axis.text.x = element_text(angle = 90, vjust = 0.5, size = 8, hjust = 1)) +
+  scale_y_continuous(trans = "log", breaks = c(5, 15,40, 100))+
+  scale_x_continuous(breaks = seq(1981,2010,1))
 
-
-
+tmax_tmin_plt / snowfall_plt + plot_layout(guides = 'collect',widths = 8, heights = 16)
+```
 
 
 
